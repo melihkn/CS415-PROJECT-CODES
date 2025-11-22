@@ -1,34 +1,8 @@
-import torch
 import torch.nn as nn
+from .difference_attention_module import DifferenceAttentionModule
+from .aspp import ASPP
 import torch.nn.functional as F
-import timm
-from .layers import ASPP
-
-class DifferenceAttentionModule(nn.Module):
-    """
-    The 'Difference attention' block from the diagram.
-    It learns a mask to apply to the absolute difference.
-    """
-    def __init__(self, in_channels):
-        super(DifferenceAttentionModule, self).__init__()
-        # A simple gate to learn the attention mask
-        self.attention_gate = nn.Sequential(
-            nn.Conv2d(in_channels * 2, in_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(in_channels),
-            nn.ReLU(),
-            nn.Conv2d(in_channels, 1, kernel_size=1, bias=False),
-            nn.Sigmoid()
-        )
-
-    def forward(self, f_t1, f_t2):
-        f_concat = torch.cat([f_t1, f_t2], dim=1)
-        f_diff = torch.abs(f_t1 - f_t2)
-        
-        attention_mask = self.attention_gate(f_concat)
-        
-        # Refine the difference by multiplying it with the learned mask
-        return f_diff * attention_mask
-
+import torch
 
 class HDANet_Head(nn.Module):
     """
@@ -90,35 +64,3 @@ class HDANet_Head(nn.Module):
         out = self.final_classifier(out)
         
         return out
-
-class HDANet(nn.Module):
-    def __init__(self, n_channels=3, n_classes=1, pretrained=True):
-        super(HDANet, self).__init__()
-        
-        # 1. Load the HRNet backbone
-        self.backbone = timm.create_model(
-            'hrnet_w18',
-            pretrained=pretrained,
-            features_only=True,
-            in_chans=n_channels
-        )
-        
-        # Get the feature info
-        feature_channels = self.backbone.feature_info.channels()
-        
-        # 2. Create the custom HDANet Head
-        self.head = HDANet_Head(
-            in_channels_list=feature_channels,
-            out_channels=256, # Internal processing dim
-            num_classes=n_classes
-        )
-
-    def forward(self, x1, x2):
-        # 1. Pass T1 through the SHARED backbone
-        t1_features = self.backbone(x1)
-        
-        # 2. Pass T2 through the *EXACT SAME* backbone
-        t2_features = self.backbone(x2)
-        
-        # 3. Pass both sets of features to our custom head
-        return self.head(t1_features, t2_features)

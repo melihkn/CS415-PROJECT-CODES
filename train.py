@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from models.hfanet import HFANet, HFANet_timm
-from models.hdanet import HDANet
+from models.HDANet.hdanet import HDANet
 from models.stanet import STANet
 # from data.dataset import get_dataloader # Uncomment when dataset is ready
 
