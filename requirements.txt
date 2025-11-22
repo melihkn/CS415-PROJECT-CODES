@@ -1,0 +1,5 @@
+torch
+numpy
+segmentation-models-pytorch
+timm
+ipykernel

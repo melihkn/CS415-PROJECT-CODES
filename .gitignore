@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project Specific
+# Datasets (assuming they are large and shouldn't be committed)
+dataset/
+data/raw/
+data/processed/
+
+# Model Checkpoints and Logs
+checkpoints/
+logs/
+*.pth
+*.pt
+runs/
+results/
+
+# Output
+outputs/
