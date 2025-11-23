@@ -30,7 +30,6 @@ def train(args):
     print(f"Loading data from {args.data_dir}...")
     train_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split="train")
     val_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split="val")
-    test_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split="test")
 
     # Model selection
     if args.model == "hfanet":
@@ -99,27 +98,6 @@ def train(args):
             break
 
     print("Training complete.")
-
-    # TEST
-    if test_loader is not None:
-        best_model_path = os.path.join("checkpoints", f"best_model_{args.model}.pth")
-        # Load best model weights for testing
-        if os.path.exists(best_model_path):
-            model.load_state_dict(torch.load(best_model_path, map_location=device))
-            print("Loaded best model weights for testing.")
-
-        evaluate_on_loader(
-            model,
-            test_loader,
-            device,
-            threshold=threshold,
-            save_pr_curve_path=f"results/pr_curve_{args.model}.png"
-        )
-
-
-# ==========================
-#   ARGPARSE
-# ==========================
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Building Change Detection Training")
