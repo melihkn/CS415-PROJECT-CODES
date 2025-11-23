@@ -3,3 +3,6 @@ numpy
 segmentation-models-pytorch
 timm
 ipykernel
+tqdm
+scikit-learn
+matplotlib

@@ -1,72 +1,137 @@
 import argparse
+import os
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+
+# Modeller
 from models.hfanet import HFANet, HFANet_timm
 from models.HDANet.hdanet import HDANet
 from models.stanet import STANet
-# from data.dataset import get_dataloader # Uncomment when dataset is ready
+
+# Dataloader
+from data.dataset import get_dataloader
+from utils.DiceLoss import DiceLoss
+from helpers import train_one_epoch, validate, evaluate_on_loader
+
 
 def train(args):
-    # 1. Setup Device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    """
+    Train the model and test it on test set
+    
+    Args:
+        args: command line arguments
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # 2. Initialize Model
-    if args.model == 'hfanet':
-        model = HFANet(encoder_name=args.backbone, classes=1, pretrained='imagenet')
-    elif args.model == 'hfanet_timm':
+    # Data loading
+    print(f"Loading data from {args.data_dir}...")
+    train_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split="train")
+    val_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split="val")
+    test_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split="test")
+
+    # Model selection
+    if args.model == "hfanet":
+        model = HFANet(encoder_name=args.backbone, classes=1, pretrained="imagenet")
+    elif args.model == "hfanet_timm":
         model = HFANet_timm(encoder_name=args.backbone, classes=1, pretrained=True)
-    elif args.model == 'hdanet':
+    elif args.model == "hdanet":
         model = HDANet(n_classes=1, pretrained=True)
-    elif args.model == 'stanet':
+    elif args.model == "stanet":
         model = STANet(backbone_name=args.backbone, classes=1, pretrained=True)
     else:
         raise ValueError(f"Unknown model: {args.model}")
-    
+
+    # Model to device
     model.to(device)
-    print(f"Model {args.model} initialized.")
+    print(f"Model {args.model} initialized with backbone {args.backbone}.")
 
-    # 3. Setup Data (Placeholder)
-    # train_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split='train')
-    # val_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split='val')
-    print("Data loaders not initialized (Dataset path required).")
-
-    # 4. Optimizer and Loss
+    # Optimizer
     optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
-    criterion = nn.BCEWithLogitsLoss() # Assuming binary change detection
 
-    # 5. Training Loop (Template)
-    print("Starting training loop...")
-    for epoch in range(args.epochs):
-        model.train()
-        running_loss = 0.0
-        
-        # for batch in train_loader:
-        #     img_A = batch['image_A'].to(device)
-        #     img_B = batch['image_B'].to(device)
-        #     label = batch['label'].to(device)
-        #
-        #     optimizer.zero_grad()
-        #     outputs = model(img_A, img_B)
-        #     loss = criterion(outputs, label)
-        #     loss.backward()
-        #     optimizer.step()
-        #     running_loss += loss.item()
-        
-        print(f"Epoch [{epoch+1}/{args.epochs}] - Loss: {running_loss:.4f}")
-        
-        # Validation...
+    # Loss functions
+    bce_loss = nn.BCEWithLogitsLoss()
+    dice_loss = DiceLoss()
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Train Change Detection Models')
-    parser.add_argument('--model', type=str, default='hfanet', choices=['hfanet', 'hfanet_timm', 'hdanet', 'stanet'], help='Model architecture')
-    parser.add_argument('--backbone', type=str, default='resnet34', help='Backbone encoder name')
-    parser.add_argument('--data_dir', type=str, default='./dataset', help='Path to dataset')
-    parser.add_argument('--epochs', type=int, default=50, help='Number of epochs')
-    parser.add_argument('--batch_size', type=int, default=8, help='Batch size')
-    parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
-    
+    # LR scheduler
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="max", factor=0.5, patience=5, verbose=True
+    )
+
+    best_val_iou = 0.0
+    patience_counter = 0
+    threshold = 0.5  # binarization
+
+    os.makedirs("checkpoints", exist_ok=True)
+
+    for epoch in range(1, args.epochs + 1):
+        train_loss, train_iou, train_f1 = train_one_epoch(
+            model, train_loader, bce_loss, dice_loss, optimizer, device, epoch, threshold=threshold
+        )
+        val_loss, val_iou, val_f1 = validate(
+            model, val_loader, bce_loss, dice_loss, device, threshold=threshold
+        )
+
+        print(
+            f"Epoch [{epoch}/{args.epochs}] "
+            f"Train Loss: {train_loss:.4f} | IoU: {train_iou:.4f} | F1: {train_f1:.4f} || "
+            f"Val Loss: {val_loss:.4f} | IoU: {val_iou:.4f} | F1: {val_f1:.4f}"
+        )
+
+        # LR is adjusted based on IoU
+        scheduler.step(val_iou)
+
+        # Save best model based on IoU
+        if val_iou > best_val_iou:
+            best_val_iou = val_iou
+            patience_counter = 0
+            save_path = os.path.join("checkpoints", f"best_model_{args.model}.pth")
+            torch.save(model.state_dict(), save_path)
+            print(f"Saved best model to {save_path} (Val IoU: {best_val_iou:.4f})")
+        else:
+            patience_counter += 1
+            print(f"No IoU improvement. Patience: {patience_counter}/{args.patience}")
+
+        if patience_counter >= args.patience:
+            print("Early stopping triggered.")
+            break
+
+    print("Training complete.")
+
+    # TEST
+    if test_loader is not None:
+        best_model_path = os.path.join("checkpoints", f"best_model_{args.model}.pth")
+        # Load best model weights for testing
+        if os.path.exists(best_model_path):
+            model.load_state_dict(torch.load(best_model_path, map_location=device))
+            print("Loaded best model weights for testing.")
+
+        evaluate_on_loader(
+            model,
+            test_loader,
+            device,
+            threshold=threshold,
+            save_pr_curve_path=f"results/pr_curve_{args.model}.png"
+        )
+
+
+# ==========================
+#   ARGPARSE
+# ==========================
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Building Change Detection Training")
+
+    parser.add_argument("--data_dir", type=str, required=True, help="Dataset root directory")
+    parser.add_argument("--model", type=str, default="hfanet",
+                        choices=["hfanet", "hfanet_timm", "hdanet", "stanet"])
+    parser.add_argument("--backbone", type=str, default="resnet34", help="Backbone name")
+    parser.add_argument("--batch_size", type=int, default=4)
+    parser.add_argument("--lr", type=float, default=3e-4)
+    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--patience", type=int, default=10)
+
     args = parser.parse_args()
     train(args)
