@@ -78,6 +78,7 @@ def train(args):
 
     # En iyi modeli takip etmek için değişken
     best_val_loss = float('inf')
+    best_val_iou = 0.0
 
     # 5. Eğitim Döngüsü
     print(f"Starting training loop for {args.epochs} epochs...")
