@@ -24,9 +24,12 @@ class ChangeDetectionDataset(Dataset):
         self.dir_label = os.path.join(root_dir, split, 'label')
         
         # Load file list (assuming filenames match across folders)
-        # self.filenames = os.listdir(self.dir_A) 
-        # Placeholder:
-        self.filenames = [] 
+        # Load file list (assuming filenames match across folders)
+        if os.path.exists(self.dir_A):
+            self.filenames = sorted(os.listdir(self.dir_A))
+        else:
+            print(f"Warning: Directory {self.dir_A} does not exist.")
+            self.filenames = [] 
 
     def __len__(self):
         return len(self.filenames)
@@ -47,12 +50,13 @@ class ChangeDetectionDataset(Dataset):
             # Apply transforms
             # Note: For change detection, geometric transforms must be identical for A, B, and label
             pass
+        else:
+            # Default to tensor conversion
+            import torchvision.transforms.functional as TF
+            img_A = TF.to_tensor(img_A)
+            img_B = TF.to_tensor(img_B)
+            label = TF.to_tensor(label)
             
-        # Convert to tensor
-        # img_A = ...
-        # img_B = ...
-        # label = ...
-        
         return {'image_A': img_A, 'image_B': img_B, 'label': label}
 
 def get_dataloader(root_dir, batch_size=8, split='train', num_workers=4):

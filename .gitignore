@@ -40,3 +40,6 @@ results/
 
 # Output
 outputs/
+test/
+train/
+val/

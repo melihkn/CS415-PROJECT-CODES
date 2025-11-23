@@ -20,11 +20,12 @@ class HighFrequencyExtractor(nn.Module):
         # Stack them to create a (out_channels=2, in_channels=1, 3, 3) weight
         sobel_weights_xy = np.stack([sobel_x, sobel_y], axis=0) # Shape (2, 3, 3)
         
-        # Create a (2*in_channels, in_channels, 3, 3) weight tensor
-        final_weights = np.zeros((2 * in_channels, in_channels, 3, 3), dtype=np.float32)
+        # Create a (2*in_channels, 1, 3, 3) weight tensor for grouped convolution
+        # Since groups=in_channels, each group sees 1 input channel.
+        final_weights = np.zeros((2 * in_channels, 1, 3, 3), dtype=np.float32)
         
         for i in range(in_channels):
-            final_weights[i*2 : (i+1)*2, i, :, :] = sobel_weights_xy
+            final_weights[i*2 : (i+1)*2, 0, :, :] = sobel_weights_xy
 
         # Create the Conv2d layer
         self.conv = nn.Conv2d(in_channels, 2 * in_channels, kernel_size=3, padding=1, groups=in_channels, bias=False)
