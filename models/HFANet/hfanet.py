@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import segmentation_models_pytorch as smp
 import timm
-from .layers import HighFrequencyExtractor, DecoderBlock
+from .components import HighFrequencyExtractor, DecoderBlock
 
 class HFANet(nn.Module):
     def __init__(self, encoder_name='resnet34', classes=1, pretrained='imagenet', in_channels=3):
@@ -84,13 +84,17 @@ class HFANet(nn.Module):
 
         # --- 4. Create Fused Feature List for Decoder ---
         # Get the simple differences for all *other* (deeper) stages
-        features_diff = [fused_s1] # Our special HFA-fused features
+        # We must include the difference of the input (index 0) to match the decoder's expectation
+        diff_0 = torch.abs(sp_features_t1[0] - sp_features_t2[0])
+        
+        features_diff = [diff_0, fused_s1] # [Input diff, HFA-fused Stage 1]
+        
         for i in range(2, len(sp_features_t1)):
             features_diff.append(torch.abs(sp_features_t1[i] - sp_features_t2[i]))
 
         # --- 5. Decoder Pass ---
         # Pass the list of *difference features* to the decoder
-        change_logits = self.smp_model.decoder(*features_diff)
+        change_logits = self.smp_model.decoder(features_diff)
         change_mask = self.smp_model.segmentation_head(change_logits)
         
         return change_mask

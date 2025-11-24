@@ -2,8 +2,8 @@ from helpers.evaluate_on_loader import evaluate_on_loader
 from data.dataset import get_dataloader
 import torch
 import os
-from models.hfanet import HFANet
-from models.hfanet import HFANet_timm
+from models.HFANet.hfanet import HFANet
+from models.HFANet.hfanet import HFANet_timm
 from models.HDANet.hdanet import HDANet
 from models.stanet import STANet
 
@@ -43,6 +43,7 @@ def test(args):
         evaluate_on_loader(
             model,
             test_loader,
+            save_results_path=os.path.join(args.data_dir, "results")
             device,
             threshold=threshold,
             save_pr_curve_path=f"results/pr_curve_{args.model}.png"

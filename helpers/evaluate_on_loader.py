@@ -8,8 +8,10 @@ import torch
 import numpy as np
 import os
 import matplotlib.pyplot as plt
+import torchvision.transforms.functional as TF
+from PIL import Image
 
-def evaluate_on_loader(model : nn.Module, dataloader : torch.utils.data.DataLoader, device : torch.device, threshold=0.5, save_pr_curve_path=None):
+def evaluate_on_loader(model : nn.Module, dataloader : torch.utils.data.DataLoader, save_results_path : str, device : torch.device, threshold=0.5, save_pr_curve_path=None):
     model.eval()
 
     total_tp = total_fp = total_fn = total_tn = 0.0
@@ -34,6 +36,15 @@ def evaluate_on_loader(model : nn.Module, dataloader : torch.utils.data.DataLoad
 
             all_probs.append(probs.view(-1).cpu().numpy())
             all_targets.append(label.view(-1).cpu().numpy())
+
+            #save result 
+            os.makedirs(save_results_path, exist_ok=True)
+
+            save_path = os.path.join(save_results_path, batch["filename"])
+            pred_pil = TF.to_pil_image(probs)
+            pred_pil.save(save_path)    
+
+            
 
     all_probs = np.concatenate(all_probs, axis=0)
     all_targets = np.concatenate(all_targets, axis=0)

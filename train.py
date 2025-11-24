@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 # Modeller
-from models.hfanet import HFANet, HFANet_timm
+from models.HFANet.hfanet import HFANet, HFANet_timm
 from models.HDANet.hdanet import HDANet
 from models.stanet import STANet
 

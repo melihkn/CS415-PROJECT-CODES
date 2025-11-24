@@ -23,8 +23,6 @@ class ChangeDetectionDataset(Dataset):
         self.dir_B = os.path.join(root_dir, split, 'B')
         self.dir_label = os.path.join(root_dir, split, 'label')
         
-        # Load file list (assuming filenames match across folders)
-        # Load file list (assuming filenames match across folders)
         if os.path.exists(self.dir_A):
             self.filenames = sorted(os.listdir(self.dir_A))
         else:
@@ -52,12 +50,13 @@ class ChangeDetectionDataset(Dataset):
             pass
         else:
             # Default to tensor conversion
-            import torchvision.transforms.functional as TF
-            img_A = TF.to_tensor(img_A)
-            img_B = TF.to_tensor(img_B)
-            label = TF.to_tensor(label)
+            pass
+        import torchvision.transforms.functional as TF
+        img_A = TF.to_tensor(img_A)
+        img_B = TF.to_tensor(img_B)
+        label = TF.to_tensor(label)
             
-        return {'image_A': img_A, 'image_B': img_B, 'label': label}
+        return {'image_A': img_A, 'image_B': img_B, 'label': label, 'filename': filename}
 
 def get_dataloader(root_dir, batch_size=8, split='train', num_workers=4):
     dataset = ChangeDetectionDataset(root_dir, split=split)
