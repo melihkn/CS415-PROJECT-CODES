@@ -13,7 +13,7 @@ from models.stanet import STANet
 # Dataloader
 from data.dataset import get_dataloader
 from utils.DiceLoss import DiceLoss
-from helpers import train_one_epoch, validate, evaluate_on_loader
+from helpers import train_one_epoch, validate
 
 
 def train(args):

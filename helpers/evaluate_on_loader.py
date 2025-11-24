@@ -1,5 +1,4 @@
 from tqdm import tqdm
-from tqdm import tqdm
 from utils.metrics import compute_confusion_matrix, iou_from_confusion, f1_from_confusion, precision_from_confusion, recall_from_confusion
 from sklearn.metrics import precision_recall_curve, average_precision_score
 from utils.metrics import sigmoid_to_probs
@@ -9,7 +8,6 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import torchvision.transforms.functional as TF
-from PIL import Image
 
 def evaluate_on_loader(model : nn.Module, dataloader : torch.utils.data.DataLoader, save_results_path : str, device : torch.device, threshold=0.5, save_pr_curve_path=None):
     model.eval()
