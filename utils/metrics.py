@@ -20,6 +20,23 @@ def calculate_iou(preds, labels, eps=1e-6):
     iou = (intersection + eps) / (union + eps)
     return iou.mean()  # batch mean IoU
 
+def calculate_iou2(outputs, labels, threshold=0.5):
+    # Model çıktısı (logits) -> Sigmoid -> 0 veya 1 (Binary Mask)
+    # outputs: (Batch, 1, H, W)
+    outputs = torch.sigmoid(outputs)
+    outputs = (outputs > threshold).float()
+    
+    # Düzleştirme (Flatten) - Piksel piksel karşılaştırma için
+    outputs = outputs.view(-1)
+    labels = labels.view(-1)
+    
+    # Kesişim ve Birleşim
+    intersection = (outputs * labels).sum()
+    union = outputs.sum() + labels.sum() - intersection
+    
+    # 0'a bölünme hatasını önlemek için küçük bir sayı (epsilon) ekliyoruz
+    iou = (intersection + 1e-6) / (union + 1e-6)
+    return iou.item()
 
 def calculate_f1(preds, labels, eps=1e-6):
     """

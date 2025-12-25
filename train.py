@@ -9,45 +9,13 @@ import torch.optim as optim
 from models.HFANet.hfanet import HFANet, HFANet_timm
 from models.HDANet.hdanet import HDANet
 from models.stanet import STANet
+from models.snunet import SNUNet_ECAM
 
 # Dataloader
 from data.dataset import get_dataloader
 from utils.DiceLoss import DiceLoss
 from helpers import train_one_epoch, validate
 
-
-def train(args):
-    """
-    Train the model and test it on test set
-    
-    Args:
-        args: command line arguments
-    """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
-
-    # Data loading
-    print(f"Loading data from {args.data_dir}...")
-    train_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split="train")
-    val_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split="val")
-
-    # Model selection
-    if args.model == "hfanet":
-        model = HFANet(encoder_name=args.backbone, classes=1, pretrained="imagenet")
-    elif args.model == "hfanet_timm":
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
-
-# Modellerin import edilmesi
-from models.hfanet import HFANet, HFANet_timm
-from models.HDANet.hdanet import HDANet
-from models.stanet import STANet
-from models.snunet import SNUNet_ECAM
-
-# Dataset fonksiyonunu import ediyoruz
-from data.dataset import get_dataloader 
 
 
 def calculate_iou(outputs, labels, threshold=0.5):
@@ -94,6 +62,12 @@ def train(args):
     # Model to device
     model.to(device)
     print(f"Model {args.model} initialized with backbone {args.backbone}.")
+
+    print(f"Loading data from {args.data_dir}...")
+    train_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split="train")
+    val_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split="val")
+    print(f"Data loaded. Train batches: {len(train_loader)}, Val batches: {len(val_loader)}")
+
 
     # Optimizer
     optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
@@ -146,133 +120,6 @@ def train(args):
             break
 
     print("Training complete.")
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Building Change Detection Training")
-
-    parser.add_argument("--data_dir", type=str, required=True, help="Dataset root directory")
-    parser.add_argument("--model", type=str, default="hfanet",
-                        choices=["hfanet", "hfanet_timm", "hdanet", "stanet"])
-    parser.add_argument("--backbone", type=str, default="resnet34", help="Backbone name")
-    parser.add_argument("--batch_size", type=int, default=4)
-    parser.add_argument("--lr", type=float, default=3e-4)
-    parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--patience", type=int, default=10)
-
-    
-    model.to(device)
-    print(f"Model {args.model} initialized successfully.")
-
-    # 3. Veri Yükleme (Dataset)
-    print("Loading datasets...")
-    # Train loader: Shuffle=True, Augmentation=True
-    train_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split='train', img_size=256)
-    
-    # Val loader: Shuffle=False, Augmentation=False
-    val_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split='val', img_size=256)
-    
-    print(f"Data loaded. Train batches: {len(train_loader)}, Val batches: {len(val_loader)}")
-
-    # 4. Optimizer ve Loss
-    # SNUNet için genelde learning rate 1e-3 veya 1e-4 iyidir.
-    optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
-    
-    # Binary Cross Entropy (Logits ile): Sayısal olarak daha stabildir.
-    criterion = nn.BCEWithLogitsLoss() 
-
-    # En iyi modeli takip etmek için değişken
-    best_val_loss = float('inf')
-    best_val_iou = 0.0
-
-    # 5. Eğitim Döngüsü
-    print(f"Starting training loop for {args.epochs} epochs...")
-
-    for epoch in range(args.epochs):
-        
-        # --- TRAINING ---
-        model.train()
-        train_loss = 0.0
-        train_iou = 0.0  # YENİ: Toplam IoU değişkeni
-        
-        for i, batch in enumerate(train_loader):
-            img_A = batch['image_A'].to(device)
-            img_B = batch['image_B'].to(device)
-            label = batch['label'].to(device).float()
-
-            optimizer.zero_grad()
-            outputs = model(img_A, img_B)
-            
-            # Loss Hesaplama (Değişmedi)
-            loss = 0
-            if isinstance(outputs, (list, tuple)):
-                # Deep Supervision: Tüm çıktıların loss'unu topla
-                for output in outputs:
-                    loss += criterion(output, label)
-                
-                # IoU için SADECE en son (en iyi) çıktıyı kullanıyoruz (genelde listenin ilk elemanı)
-                final_output = outputs[0]
-            else:
-                loss = criterion(outputs, label)
-                final_output = outputs
-
-            loss.backward()
-            optimizer.step()
-            
-            # İstatistikleri Güncelle
-            train_loss += loss.item()
-            train_iou += calculate_iou(final_output, label) # YENİ: Batch'in IoU'sunu ekle
-        
-        # Ortalamaları Al
-        avg_train_loss = train_loss / len(train_loader)
-        avg_train_iou = train_iou / len(train_loader) # YENİ
-        
-        # --- VALIDATION ---
-        model.eval()
-        val_loss = 0.0
-        val_iou = 0.0 # YENİ
-        
-        with torch.no_grad():
-            for batch in val_loader:
-                img_A = batch['image_A'].to(device)
-                img_B = batch['image_B'].to(device)
-                label = batch['label'].to(device).float()
-
-                outputs = model(img_A, img_B)
-                
-                # Loss ve IoU Hesaplama
-                batch_loss = 0
-                if isinstance(outputs, (list, tuple)):
-                    for output in outputs:
-                        batch_loss += criterion(output, label)
-                    final_output = outputs[0] # IoU için en iyi çıktı
-                else:
-                    batch_loss = criterion(outputs, label)
-                    final_output = outputs
-                
-                val_loss += batch_loss.item()
-                val_iou += calculate_iou(final_output, label) # YENİ
-
-        avg_val_loss = val_loss / len(val_loader)
-        avg_val_iou = val_iou / len(val_loader) # YENİ
-
-        # EKRANA YAZDIRMA (GÜNCELLENDİ)
-        print(f"Epoch [{epoch+1}/{args.epochs}]")
-        print(f"   Train Loss: {avg_train_loss:.4f} | Train IoU: {avg_train_iou:.4f}")
-        print(f"   Val   Loss: {avg_val_loss:.4f}   | Val   IoU: {avg_val_iou:.4f}")
-
-        if avg_val_iou > best_val_iou:  # Loss küçüktür değil, IoU büyüktür kullanıyoruz
-            best_val_iou = avg_val_iou
-            
-            # Klasör yoksa oluştur
-            save_dir = 'checkpoints'
-            if not os.path.exists(save_dir):
-                os.makedirs(save_dir)
-                
-            save_path = os.path.join(save_dir, 'best_model.pth')
-            torch.save(model.state_dict(), save_path)
-            print(f"--> Best model saved to {save_path} (Val IoU: {best_val_iou:.4f})")
-
-    print("Training finished.")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train Change Detection Models')
