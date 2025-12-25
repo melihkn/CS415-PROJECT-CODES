@@ -1,40 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
 import timm
 
-class HighFrequencyExtractor(nn.Module):
-    """
-    Extracts high-frequency features (edges) using a fixed Sobel filter.
-    This module is NOT trained.
-    """
-    def __init__(self, in_channels=3):
-        super(HighFrequencyExtractor, self).__init__()
-        self.in_channels = in_channels
-        
-        # Define Sobel filters
-        sobel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
-        sobel_y = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=np.float32)
-        
-        # Stack them to create a (out_channels=2, in_channels=1, 3, 3) weight
-        sobel_weights_xy = np.stack([sobel_x, sobel_y], axis=0) # Shape (2, 3, 3)
-        
-        # Create a (2*in_channels, in_channels, 3, 3) weight tensor
-        final_weights = np.zeros((2 * in_channels, in_channels, 3, 3), dtype=np.float32)
-        
-        for i in range(in_channels):
-            final_weights[i*2 : (i+1)*2, i, :, :] = sobel_weights_xy
 
-        # Create the Conv2d layer
-        self.conv = nn.Conv2d(in_channels, 2 * in_channels, kernel_size=3, padding=1, groups=in_channels, bias=False)
-        
-        # Set the weights and make them non-trainable
-        self.conv.weight = nn.Parameter(torch.from_numpy(final_weights), requires_grad=False)
-
-    def forward(self, x):
-        # Apply the fixed Sobel filter
-        return self.conv(x)
 
 
 
@@ -138,33 +107,8 @@ class PAM(nn.Module):
         # Add residual connection
         return out + x
 
-class DoubleConv(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.double_conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels), nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels), nn.ReLU(inplace=True)
-        )
-    def forward(self, x):
-        return self.double_conv(x)
 
-class DecoderBlock(nn.Module):
-    def __init__(self, in_channels, skip_channels, out_channels):
-        super().__init__()
-        self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
-        self.conv = DoubleConv(in_channels // 2 + skip_channels, out_channels)
 
-    def forward(self, x_up, x_skip):
-        x_up = self.up(x_up)
-        # Pad to handle potential size mismatch
-        diffY = x_skip.size()[2] - x_up.size()[2]
-        diffX = x_skip.size()[3] - x_up.size()[3]
-        x_up = F.pad(x_up, [diffX // 2, diffX - diffX // 2,
-                        diffY // 2, diffY - diffY // 2])
-        x = torch.cat([x_skip, x_up], dim=1)
-        return self.conv(x)
 
 class ResNetFPNFeatureExtractor(nn.Module):
     """
