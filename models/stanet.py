@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .layers import ResNetFPNFeatureExtractor, PAM
+from models.layers import ResNetFPNFeatureExtractor, PAM
 
 class STANet(nn.Module):
     def __init__(self, backbone_name='resnet34', fpn_out_channels=256, 

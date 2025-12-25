@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
 import timm
-from .components import HDANet_Head
+from models.HDANet.components import HDANet_Head
 
 
 class HDANet(nn.Module):
