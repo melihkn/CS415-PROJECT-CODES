@@ -1,64 +1,58 @@
-from helpers.evaluate_on_loader import evaluate_on_loader
-from data.dataset import get_dataloader
-import torch
 import os
-from models.HFANet.hfanet import HFANet
-from models.HFANet.hfanet import HFANet_timm
-from models.HDANet.hdanet import HDANet
-from models.stanet import STANet
+import torch
+from torch.utils.data import DataLoader
+from models.snunet import SNUNet_ECAM
+from data.dataset import ChangeDetectionDataset
+import torchvision.transforms.functional as TF
+from PIL import Image
 
-def test(args):
+def test(data_dir, model_path, output_dir='./results'):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # 1. Modeli Yükle
+    print("Model yükleniyor...")
+    model = SNUNet_ECAM(in_ch=3, out_ch=1).to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
 
-    threshold = args.threshold  # binarization
+    # 2. Test Verisini Yükle
+    test_dataset = ChangeDetectionDataset(root_dir=data_dir, split='test', img_size=256)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False) # Tek tek işleyelim
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
-    test_loader = get_dataloader(args.data_dir, batch_size=args.batch_size, split="test")
+    print(f"Test başlıyor. Toplam {len(test_dataset)} görüntü...")
 
-    # Model selection
-    if args.model == "hfanet":
-        model = HFANet(encoder_name=args.backbone, classes=1, pretrained=None)
-    elif args.model == "hfanet_timm":
-        model = HFANet_timm(encoder_name=args.backbone, classes=1, pretrained=None)
-    elif args.model == "hdanet":
-        model = HDANet(n_classes=1, pretrained=None)
-    elif args.model == "stanet":
-        model = STANet(backbone_name=args.backbone, classes=1, pretrained=None)
-    else:
-        raise ValueError(f"Unknown model: {args.model}")
+    # 3. Tahmin Döngüsü
+    with torch.no_grad():
+        for i, batch in enumerate(test_loader):
+            img_A = batch['image_A'].to(device)
+            img_B = batch['image_B'].to(device)
+            filename = batch['filename'][0] # Dosya ismini al
 
-    # Model to device
-    model.to(device)
-    print(f"Model {args.model} initialized with backbone {args.backbone}.")
+            # Model Tahmini
+            outputs = model(img_A, img_B)
+            
+            # SNUNet tuple döndürür, en son (en iyi) çıktıyı alıyoruz: outputs[0]
+            # Sigmoid ile 0-1 arasına sıkıştırıyoruz
+            pred = torch.sigmoid(outputs[0])
+            
+            # 0.5 Threshold uygulayıp Binary Maske yapıyoruz
+            pred_mask = (pred > 0.5).float().cpu().squeeze() # Boyutları (H, W) yap
+            
+            # Resmi Kaydet
+            pred_pil = TF.to_pil_image(pred_mask)
+            save_path = os.path.join(output_dir, filename)
+            pred_pil.save(save_path)
+            
+            if i % 10 == 0:
+                print(f"İşlenen: {i}/{len(test_dataset)}")
 
-    # TEST
-    if test_loader is not None:
-        best_model_path = os.path.join("checkpoints", f"best_model_{args.model}.pth")
-        # Load best model weights for testing
-        if os.path.exists(best_model_path):
-            model.load_state_dict(torch.load(best_model_path, map_location=device))
-            print("Loaded best model weights for testing.")
+    print(f"Test tamamlandı! Sonuçlar '{output_dir}' klasörüne kaydedildi.")
 
-        evaluate_on_loader(
-            model,
-            test_loader,
-            save_results_path=os.path.join(args.data_dir, "results")
-            device,
-            threshold=threshold,
-            save_pr_curve_path=f"results/pr_curve_{args.model}.png"
-        )
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Building Change Detection Testing")
-
-    parser.add_argument("--data_dir", type=str, required=True, help="Dataset root directory")
-    parser.add_argument("--model", type=str, default="hfanet",
-                        choices=["hfanet", "hfanet_timm", "hdanet", "stanet"])
-    parser.add_argument("--backbone", type=str, default="resnet34", help="Backbone name")
-    parser.add_argument("--batch_size", type=int, default=4)
-    parser.add_argument("--threshold", type=float, default=0.5)
-
-    args = parser.parse_args()
-    test(args)
+if __name__ == '__main__':
+    # Kullanım:
+    # 1. Önce 'train.py' çalıştırıp 'checkpoints/best_model.pth' oluşturmalısın.
+    # 2. Sonra bu scripti çalıştır.
+    test(data_dir='./dataset', model_path='checkpoints/best_model.pth')
