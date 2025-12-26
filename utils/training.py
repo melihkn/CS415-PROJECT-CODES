@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-from .metrics import batch_metrics
+from .metrics import batch_metrics, iou_from_confusion, f1_from_confusion
 
 
 def normalize_model_output(outputs):
@@ -79,6 +79,10 @@ def train_one_epoch(
     running_iou = 0.0
     running_f1 = 0.0
     num_batches = 0
+    running_tp = 0
+    running_fp = 0
+    running_fn = 0
+    running_tn = 0
 
     pbar = tqdm(dataloader, desc=f"Epoch {epoch} [Train]")
 
@@ -106,6 +110,10 @@ def train_one_epoch(
         metrics = batch_metrics(logits, label, threshold=threshold)
         running_iou += metrics["iou"]
         running_f1 += metrics["f1"]
+        running_tp += metrics["tp"]
+        running_fp += metrics["fp"]
+        running_fn += metrics["fn"]
+        running_tn += metrics["tn"]
 
         pbar.set_postfix({
             "loss": f"{loss.item():.4f}",
@@ -114,8 +122,8 @@ def train_one_epoch(
         })
 
     epoch_loss = running_loss / num_batches
-    epoch_iou = running_iou / num_batches
-    epoch_f1 = running_f1 / num_batches
+    epoch_iou = iou_from_confusion(running_tp, running_fp, running_fn).item()
+    epoch_f1 = f1_from_confusion(running_tp, running_fp, running_fn).item()
 
     return epoch_loss, epoch_iou, epoch_f1
 

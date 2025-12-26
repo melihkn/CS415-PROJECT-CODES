@@ -48,6 +48,10 @@ def validate(
     running_iou = 0.0
     running_f1 = 0.0
     num_batches = 0
+    running_tp = 0
+    running_fp = 0
+    running_fn = 0
+    running_tn = 0
 
     with torch.no_grad():
         pbar = tqdm(dataloader, desc="Validating")
@@ -68,6 +72,10 @@ def validate(
             metrics = batch_metrics(logits, label, threshold=threshold)
             running_iou += metrics["iou"]
             running_f1 += metrics["f1"]
+            running_tp += metrics["tp"]
+            running_fp += metrics["fp"] 
+            running_fn += metrics["fn"]
+            running_tn += metrics["tn"]
 
             pbar.set_postfix({
                 "val_loss": f"{loss.item():.4f}",
@@ -76,8 +84,8 @@ def validate(
             })
 
     avg_loss = running_loss / num_batches
-    avg_iou = running_iou / num_batches
-    avg_f1 = running_f1 / num_batches
+    avg_iou = iou_from_confusion(running_tp, running_fp, running_fn).item()
+    avg_f1 = f1_from_confusion(running_tp, running_fp, running_fn).item()
 
     return avg_loss, avg_iou, avg_f1
 
