@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import segmentation_models_pytorch as smp
 import timm
-from .components import HighFrequencyExtractor, DecoderBlock
+from models.HFANet.components import HighFrequencyExtractor, DecoderBlock
 
 class HFANet(nn.Module):
     def __init__(self, encoder_name='resnet34', classes=1, pretrained='imagenet', in_channels=3):

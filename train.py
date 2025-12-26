@@ -9,6 +9,9 @@ from models.snunet import SNUNet_ECAM
 from models.stanet import STANet
 from models.HDANet.hdanet import HDANet
 from models.HFANet.hfanet import HFANet, HFANet_timm
+from models.HDANet.hdanet import HDANet
+from models.stanet import STANet
+from models.snunet import SNUNet_ECAM
 
 # Data
 from data.dataset import get_dataloader
