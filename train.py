@@ -8,9 +8,15 @@ import torch.optim as optim
 from data.dataset import get_dataloader
 
 # Utils
-from utils.losses import DiceLoss, FocalLoss, SoftIoULoss
+from utils.losses import DiceLoss, FocalLoss, SoftIoULoss, DenseContrastiveLoss
 from utils.training import train_one_epoch, CombinedLoss
 from utils.evaluation import validate
+
+#Models
+from models.snunet import SNUNet_ECAM, train_snunet_epoch
+
+
+
 
 
 def get_model(args, device):
@@ -22,9 +28,11 @@ def get_model(args, device):
     model_name = args.model.lower()
     
     if model_name == 'snunet':
-        from models.snunet import SNUNet_ECAM
-        model = SNUNet_ECAM(in_ch=3, out_ch=1)
-        print(f"Model: SNUNet-ECAM")
+        use_dense = args.use_dense_cl
+        model = SNUNet_ECAM(in_ch=3, out_ch=1, use_dense_cl=use_dense)
+        
+        mode_str = "+ DenseCL" if use_dense else "(Standard)"
+        print(f"Model: SNUNet-ECAM {mode_str}")
         
     elif model_name == 'hdanet':
         from models.HDANet.hdanet import HDANet
@@ -159,6 +167,11 @@ def train(args):
     
     Compatible with: SNUNet, HDANet, HFANet, HFANet-TIMM, STANet
     """
+
+    criterion_dense = None
+    if args.model.lower() == 'snunet' and args.use_dense_cl:
+        print("Initializing Dense Contrastive Loss...")
+        criterion_dense = DenseContrastiveLoss(temperature=0.07).to(device)
     # Device setup
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"\n{'='*60}")
@@ -188,10 +201,17 @@ def train(args):
     print(f"Train batches: {len(train_loader)}, Val batches: {len(val_loader)}")
     
     # Create loss, optimizer, scheduler
-    criterion = get_criterion(args)
+    criterion_seg = get_criterion(args)
     optimizer = get_optimizer(model, args)
     scheduler = get_scheduler(optimizer, args)
-    
+
+
+    criterion_dense = None
+    if args.model.lower() == 'snunet':
+        print("Initializing Dense Contrastive Loss for SNUNet...")
+        criterion_dense = DenseContrastiveLoss(temperature=0.07).to(device)
+
+
     # Create checkpoint directory
     checkpoint_dir = args.checkpoint_dir
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -207,21 +227,37 @@ def train(args):
     # Training loop
     for epoch in range(1, args.epochs + 1):
         # Train one epoch
-        train_loss, train_iou, train_f1 = train_one_epoch(
-            model=model,
-            dataloader=train_loader,
-            criterion=criterion,
-            optimizer=optimizer,
-            device=device,
-            epoch=epoch,
-            threshold=args.threshold
-        )
+        if args.model.lower() == 'snunet' and args.use_dense_cl:
+            # Use custom training loop for SNUNet (Dense-CL)
+            train_loss, train_iou, train_f1 = train_snunet_epoch(
+                model=model,
+                dataloader=train_loader,
+                criterion_seg=criterion_seg,
+                criterion_dense=criterion_dense,
+                optimizer=optimizer,
+                device=device,
+                epoch=epoch,
+                lambda_dense=0.1 # Weight for contrastive loss
+            )
+        else:
+            # Use standard training loop for other models
+            train_loss, train_iou, train_f1 = train_one_epoch(
+                model=model,
+                dataloader=train_loader,
+                criterion=criterion_seg,
+                optimizer=optimizer,
+                device=device,
+                epoch=epoch,
+                threshold=args.threshold
+            )
         
         # Validate
+        
+        
         val_loss, val_iou, val_f1 = validate(
             model=model,
             dataloader=val_loader,
-            criterion=criterion,
+            criterion=criterion_seg,
             device=device,
             threshold=args.threshold
         )
@@ -334,6 +370,9 @@ def parse_args():
                         help='Directory to save checkpoints')
     parser.add_argument('--resume', type=str, default=None,
                         help='Path to checkpoint to resume training')
+    #DenseCL
+    parser.add_argument('--use_dense_cl', action='store_true', 
+                        help='Enable Dense Contrastive Learning for SNUNet')
     
     return parser.parse_args()
 
