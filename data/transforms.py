@@ -1,7 +1,7 @@
 import random
 from PIL import Image
 import torchvision.transforms.functional as TF
-
+import torchvision.transforms as transforms
 
 class Compose:
     """Applies a sequence of transforms to image pairs and label."""
@@ -23,6 +23,25 @@ class Resize:
         img_A = TF.resize(img_A, self.size, interpolation=Image.BILINEAR)
         img_B = TF.resize(img_B, self.size, interpolation=Image.BILINEAR)
         label = TF.resize(label, self.size, interpolation=Image.NEAREST)
+        return img_A, img_B, label
+
+
+class RandomCrop:
+    """
+    [YENİ] Randomly crops the images to the specified size.
+    This preserves the original resolution/details of the satellite image.
+    """
+    def __init__(self, size):
+        self.size = size if isinstance(size, (list, tuple)) else (size, size)
+    
+    def __call__(self, img_A, img_B, label):
+        # Image A üzerinden kırpma parametrelerini al (hepsi için aynı olsun diye)
+        i, j, h, w = transforms.RandomCrop.get_params(img_A, output_size=self.size)
+        
+        img_A = TF.crop(img_A, i, j, h, w)
+        img_B = TF.crop(img_B, i, j, h, w)
+        label = TF.crop(label, i, j, h, w)
+        
         return img_A, img_B, label
 
 
@@ -62,11 +81,7 @@ class RandomRotation:
 
 
 class ColorJitter:
-    """
-    Applies synchronized brightness and contrast augmentation to both images.
-    Only applied to img_A and img_B, not to label.
-    Same values are applied to both images to maintain consistency.
-    """
+    """Applies synchronized brightness and contrast augmentation."""
     def __init__(self, brightness=0.2, contrast=0.2, p=0.5):
         self.brightness = brightness
         self.contrast = contrast
@@ -85,7 +100,7 @@ class ColorJitter:
 
 
 class GaussianBlur:
-    """Applies Gaussian blur augmentation to both images."""
+    """Applies Gaussian blur augmentation."""
     def __init__(self, kernel_size=3, p=0.3):
         self.kernel_size = kernel_size
         self.p = p
@@ -104,10 +119,7 @@ class ToTensor:
 
 
 class Normalize:
-    """
-    Normalizes images using ImageNet statistics.
-    Only applied to img_A and img_B, not to label.
-    """
+    """Normalizes images using ImageNet statistics."""
     def __init__(self, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
         self.mean = mean
         self.std = std
@@ -119,10 +131,7 @@ class Normalize:
 
 
 class BinarizeLabel:
-    """
-    Converts label to binary (0/1).
-    Cleans up interpolation artifacts that may occur after resizing.
-    """
+    """Converts label to binary (0/1)."""
     def __init__(self, threshold=0.5):
         self.threshold = threshold
     
@@ -132,22 +141,16 @@ class BinarizeLabel:
 
 
 # ============================================================
-# Helper Functions - Ready-to-use transform pipelines
-# Compatible with: SNUNet, HDANet, HFANet, STANet, SegNet
+# Helper Functions
 # ============================================================
 
 def get_train_transforms(img_size=256):
     """
-    Returns training transform pipeline with augmentations.
-    
-    Args:
-        img_size: Target image size (int or tuple)
-    
-    Returns:
-        Compose object with training transforms
+    Returns training transforms.
+    CRITICAL CHANGE: Uses RandomCrop instead of Resize to preserve details.
     """
     return Compose([
-        Resize(img_size),
+        RandomCrop(img_size),  # [DEĞİŞİKLİK] Resize yerine Crop kullanıldı!
         RandomHorizontalFlip(p=0.5),
         RandomVerticalFlip(p=0.5),
         RandomRotation(p=0.5),
@@ -161,16 +164,12 @@ def get_train_transforms(img_size=256):
 
 def get_val_transforms(img_size=256):
     """
-    Returns validation/test transform pipeline without augmentations.
-    
-    Args:
-        img_size: Target image size (int or tuple)
-    
-    Returns:
-        Compose object with validation transforms
+    Returns validation transforms.
+    Keeps Resize for now to ensure we see the whole image context during val.
+    Ideally, for A100, we should validate on larger sizes (e.g. 512 or 1024).
     """
     return Compose([
-        Resize(img_size),
+        Resize(img_size), # Validasyon için şimdilik Resize kalsın (hata almamak için)
         ToTensor(),
         Normalize(),
         BinarizeLabel(),
