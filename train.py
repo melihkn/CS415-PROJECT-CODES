@@ -17,7 +17,7 @@ def get_model(args, device):
     """
     Factory function to create model based on arguments.
     
-    Supported models: snunet, hdanet, hfanet, hfanet_timm, stanet
+    Supported models: snunet, hdanet, hfanet, hfanet_timm, stanet, segnet
     """
     model_name = args.model.lower()
     
@@ -45,10 +45,15 @@ def get_model(args, device):
         from models.stanet import STANet
         model = STANet(backbone_name=args.backbone, classes=1, pretrained=True)
         print(f"Model: STANet with backbone={args.backbone}")
+
+    elif model_name == 'segnet':
+        from models.segnet import SegNet
+        model = SegNet(backbone_name=args.backbone, pretrained=True)
+        print(f"Model: SegNet with backbone={args.backbone}")
         
     else:
         raise ValueError(f"Unknown model: {args.model}. "
-                        f"Choose from: snunet, hdanet, hfanet, hfanet_timm, stanet")
+                        f"Choose from: snunet, hdanet, hfanet, hfanet_timm, stanet, segnet")
     
     return model.to(device)
 
@@ -157,7 +162,7 @@ def train(args):
     """
     Main training function.
     
-    Compatible with: SNUNet, HDANet, HFANet, HFANet-TIMM, STANet
+    Compatible with: SNUNet, HDANet, HFANet, HFANet-TIMM, STANet, SegNet
     """
     # Device setup
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -291,10 +296,10 @@ def parse_args():
     
     # Model arguments
     parser.add_argument('--model', type=str, default='snunet',
-                        choices=['snunet', 'hdanet', 'hfanet', 'hfanet_timm', 'stanet'],
+                        choices=['snunet', 'hdanet', 'hfanet', 'hfanet_timm', 'stanet','segnet'],
                         help='Model architecture')
     parser.add_argument('--backbone', type=str, default='resnet34',
-                        help='Backbone encoder (for hfanet, hfanet_timm, stanet)')
+                        help='Backbone encoder (for hfanet, hfanet_timm, stanet,segnet)')
     
     # Data arguments
     parser.add_argument('--data_dir', type=str, required=True,
