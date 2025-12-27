@@ -236,7 +236,7 @@ def train(args):
                 optimizer=optimizer,
                 device=device,
                 epoch=epoch,
-                lambda_dense=0.3 # Weight for contrastive loss
+                lambda_dense=args.lambda_dense # Weight for contrastive loss
             )
         else:
             # Use standard training loop for other models
@@ -372,6 +372,8 @@ def parse_args():
     #DenseCL
     parser.add_argument('--use_dense_cl', action='store_true', 
                         help='Enable Dense Contrastive Learning for SNUNet')
+    
+    parser.add_argument('--lambda_dense', type=float, default=0.001, help='Weight for Dense Contrastive Loss')
     
     return parser.parse_args()
 
