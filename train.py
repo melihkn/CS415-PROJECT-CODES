@@ -167,11 +167,6 @@ def train(args):
     
     Compatible with: SNUNet, HDANet, HFANet, HFANet-TIMM, STANet
     """
-
-    criterion_dense = None
-    if args.model.lower() == 'snunet' and args.use_dense_cl:
-        print("Initializing Dense Contrastive Loss...")
-        criterion_dense = DenseContrastiveLoss(temperature=0.07).to(device)
     # Device setup
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"\n{'='*60}")
@@ -179,6 +174,10 @@ def train(args):
     print(f"{'='*60}")
     print(f"Device: {device}")
     
+    criterion_dense = None
+    if args.model.lower() == 'snunet' and args.use_dense_cl:
+        print("Initializing Dense Contrastive Loss...")
+        criterion_dense = DenseContrastiveLoss(temperature=0.07).to(device)
     # Create model
     model = get_model(args, device)
     
