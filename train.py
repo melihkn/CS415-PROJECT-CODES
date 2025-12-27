@@ -236,7 +236,7 @@ def train(args):
                 optimizer=optimizer,
                 device=device,
                 epoch=epoch,
-                lambda_dense=0.1 # Weight for contrastive loss
+                lambda_dense=0.3 # Weight for contrastive loss
             )
         else:
             # Use standard training loop for other models
