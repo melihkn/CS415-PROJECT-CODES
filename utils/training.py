@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from tqdm import tqdm
 
@@ -28,6 +29,7 @@ def compute_loss(criterion, outputs, targets):
     
     For deep supervision models (SNUNet), loss is computed on all outputs.
     For single output models, loss is computed normally.
+    Automatically resizes outputs to match target size if needed.
     
     Args:
         criterion: Loss function
@@ -37,12 +39,21 @@ def compute_loss(criterion, outputs, targets):
     Returns:
         loss: Scalar tensor
     """
+    target_size = targets.shape[-2:]  # (H, W)
+    
     if isinstance(outputs, (list, tuple)):
         # Deep supervision - sum losses from all outputs
         total_loss = 0.0
         for output in outputs:
+            # Resize output to match target if needed
+            if output.shape[-2:] != target_size:
+                output = F.interpolate(output, size=target_size, mode='bilinear', align_corners=False)
             total_loss += criterion(output, targets)
         return total_loss / len(outputs)  # Average loss
+    
+    # Resize output to match target if needed
+    if outputs.shape[-2:] != target_size:
+        outputs = F.interpolate(outputs, size=target_size, mode='bilinear', align_corners=False)
     return criterion(outputs, targets)
 
 
@@ -107,6 +118,9 @@ def train_one_epoch(
         num_batches += 1
 
         logits = normalize_model_output(outputs)
+        # Resize logits to match label size if needed
+        if logits.shape[-2:] != label.shape[-2:]:
+            logits = F.interpolate(logits, size=label.shape[-2:], mode='bilinear', align_corners=False)
         metrics = batch_metrics(logits, label, threshold=threshold)
         running_iou += metrics["iou"]
         running_f1 += metrics["f1"]
@@ -122,8 +136,14 @@ def train_one_epoch(
         })
 
     epoch_loss = running_loss / num_batches
-    epoch_iou = iou_from_confusion(running_tp, running_fp, running_fn).item()
-    epoch_f1 = f1_from_confusion(running_tp, running_fp, running_fn).item()
+    epoch_iou = iou_from_confusion(running_tp, running_fp, running_fn)
+    epoch_f1 = f1_from_confusion(running_tp, running_fp, running_fn)
+    
+    # Handle both tensor and float returns
+    if hasattr(epoch_iou, 'item'):
+        epoch_iou = epoch_iou.item()
+    if hasattr(epoch_f1, 'item'):
+        epoch_f1 = epoch_f1.item()
 
     return epoch_loss, epoch_iou, epoch_f1
 
@@ -144,6 +164,10 @@ class CombinedLoss(nn.Module):
         self.weights = [weight for _, weight in losses_with_weights]
     
     def forward(self, logits, targets):
+        # Resize logits to match target size if needed
+        if logits.shape[-2:] != targets.shape[-2:]:
+            logits = F.interpolate(logits, size=targets.shape[-2:], mode='bilinear', align_corners=False)
+        
         total_loss = 0.0
         for loss_fn, weight in zip(self.losses, self.weights):
             total_loss += weight * loss_fn(logits, targets)

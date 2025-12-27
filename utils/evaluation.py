@@ -1,6 +1,7 @@
 import os
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 import torchvision.transforms.functional as TF
@@ -69,6 +70,9 @@ def validate(
 
             # Compute metrics on normalized output
             logits = normalize_model_output(outputs)
+            # Resize logits to match label size if needed
+            if logits.shape[-2:] != label.shape[-2:]:
+                logits = F.interpolate(logits, size=label.shape[-2:], mode='bilinear', align_corners=False)
             metrics = batch_metrics(logits, label, threshold=threshold)
             running_iou += metrics["iou"]
             running_f1 += metrics["f1"]
@@ -84,8 +88,14 @@ def validate(
             })
 
     avg_loss = running_loss / num_batches
-    avg_iou = iou_from_confusion(running_tp, running_fp, running_fn).item()
-    avg_f1 = f1_from_confusion(running_tp, running_fp, running_fn).item()
+    avg_iou = iou_from_confusion(running_tp, running_fp, running_fn)
+    avg_f1 = f1_from_confusion(running_tp, running_fp, running_fn)
+    
+    # Handle both tensor and float returns
+    if hasattr(avg_iou, 'item'):
+        avg_iou = avg_iou.item()
+    if hasattr(avg_f1, 'item'):
+        avg_f1 = avg_f1.item()
 
     return avg_loss, avg_iou, avg_f1
 
@@ -134,6 +144,9 @@ def evaluate_on_loader(
             # Forward pass and normalize output
             outputs = model(img_A, img_B)
             logits = normalize_model_output(outputs)
+            # Resize logits to match label size if needed
+            if logits.shape[-2:] != label.shape[-2:]:
+                logits = F.interpolate(logits, size=label.shape[-2:], mode='bilinear', align_corners=False)
             probs = sigmoid_to_probs(logits)
 
             # Confusion matrix

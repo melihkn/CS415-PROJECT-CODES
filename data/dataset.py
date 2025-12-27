@@ -42,11 +42,22 @@ class ChangeDetectionDataset(Dataset):
         self.dir_B = os.path.join(root_dir, split, 'B')
         self.dir_label = os.path.join(root_dir, split, 'label')
         
-        # Load and sort filenames
-        self.filenames = sorted([
-            f for f in os.listdir(self.dir_A) 
-            if f.lower().endswith(('.png', '.jpg', '.jpeg', '.tif'))
-        ])
+        # Get files from each folder
+        files_A = set(f for f in os.listdir(self.dir_A) 
+                      if f.lower().endswith(('.png', '.jpg', '.jpeg', '.tif')))
+        files_B = set(f for f in os.listdir(self.dir_B) 
+                      if f.lower().endswith(('.png', '.jpg', '.jpeg', '.tif')))
+        files_label = set(f for f in os.listdir(self.dir_label) 
+                          if f.lower().endswith(('.png', '.jpg', '.jpeg', '.tif')))
+        
+        # Only use files that exist in ALL THREE folders
+        common_files = files_A & files_B & files_label
+        self.filenames = sorted(list(common_files))
+        
+        # Report any mismatches
+        if len(common_files) < len(files_A):
+            print(f"  Warning [{split}]: Using {len(common_files)}/{len(files_A)} images "
+                  f"(filtered to files existing in A/, B/, and label/)")
         
         # Use provided transform or default based on split
         if transform is not None:
@@ -57,7 +68,7 @@ class ChangeDetectionDataset(Dataset):
         
         # Validation check
         if len(self.filenames) == 0:
-            raise RuntimeError(f"No images found in '{self.dir_A}'")
+            raise RuntimeError(f"No common images found across A/, B/, label/ in '{root_dir}/{split}'")
 
     def __len__(self):
         return len(self.filenames)
