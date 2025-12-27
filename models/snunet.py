@@ -148,11 +148,11 @@ class SNUNet_ECAM(nn.Module):
         x4_0B = self.conv4_0(self.pool(x3_0B))
 
         # [NEW] Dense Contrastive Projection
-        # Project the deepest features to the embedding space
-        proj_A, proj_B = None, None
-        if self.use_dense_cl:
+        if self.use_dense_cl and self.training:
             proj_A = self.projector(x4_0A)
             proj_B = self.projector(x4_0B)
+        else:
+            proj_A, proj_B = None, None
 
         # --- Nested Decoder Path ---
         x0_1 = self.conv0_1(torch.cat([x0_0A, x0_0B, self.Up1_0(x1_0B)], 1))
@@ -175,11 +175,9 @@ class SNUNet_ECAM(nn.Module):
         out = self.ca(out) * (out + ca1.repeat(1, 4, 1, 1))
         out = self.conv_final(out)
 
-        if self.use_dense_cl:
-            
+        if self.use_dense_cl and self.training:
             return out, proj_A, proj_B
         else:
-            
             return (out,)
         
 
