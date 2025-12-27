@@ -4,15 +4,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-# Models
-from models.snunet import SNUNet_ECAM
-from models.stanet import STANet
-from models.HDANet.hdanet import HDANet
-from models.HFANet.hfanet import HFANet, HFANet_timm
-from models.HDANet.hdanet import HDANet
-from models.stanet import STANet
-from models.snunet import SNUNet_ECAM
-
 # Data
 from data.dataset import get_dataloader
 
@@ -31,22 +22,27 @@ def get_model(args, device):
     model_name = args.model.lower()
     
     if model_name == 'snunet':
+        from models.snunet import SNUNet_ECAM
         model = SNUNet_ECAM(in_ch=3, out_ch=1)
         print(f"Model: SNUNet-ECAM")
         
     elif model_name == 'hdanet':
+        from models.HDANet.hdanet import HDANet
         model = HDANet(n_classes=1, pretrained=True)
         print(f"Model: HDANet")
         
     elif model_name == 'hfanet':
+        from models.HFANet.hfanet import HFANet
         model = HFANet(encoder_name=args.backbone, classes=1, pretrained='imagenet')
         print(f"Model: HFANet with backbone={args.backbone}")
         
     elif model_name == 'hfanet_timm':
+        from models.HFANet.hfanet import HFANet_timm
         model = HFANet_timm(encoder_name=args.backbone, classes=1, pretrained=True)
         print(f"Model: HFANet-TIMM with backbone={args.backbone}")
         
     elif model_name == 'stanet':
+        from models.stanet import STANet
         model = STANet(backbone_name=args.backbone, classes=1, pretrained=True)
         print(f"Model: STANet with backbone={args.backbone}")
         
