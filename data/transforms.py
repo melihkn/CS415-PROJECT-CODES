@@ -144,7 +144,7 @@ class BinarizeLabel:
 # Helper Functions
 # ============================================================
 
-def get_train_transforms(img_size=256):
+def get_train_transforms(img_size=512):
     """
     Returns training transforms.
     CRITICAL CHANGE: Uses RandomCrop instead of Resize to preserve details.

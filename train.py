@@ -205,10 +205,7 @@ def train(args):
     scheduler = get_scheduler(optimizer, args)
 
 
-    criterion_dense = None
-    if args.model.lower() == 'snunet':
-        print("Initializing Dense Contrastive Loss for SNUNet...")
-        criterion_dense = DenseContrastiveLoss(temperature=0.07).to(device)
+
 
 
     # Create checkpoint directory
