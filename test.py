@@ -25,7 +25,9 @@ def get_model(model_name, backbone='resnet34'):
     model_name = model_name.lower()
     
     if model_name == 'snunet':
-        model = SNUNet_ECAM(in_ch=3, out_ch=1)
+        use_dense = getattr(args, 'use_dense_cl', False)
+        model = SNUNet_ECAM(in_ch=3, out_ch=1, use_dense_cl=use_dense)
+        print(f"Model initialized: SNUNet-ECAM (DenseCL={'Enabled' if use_dense else 'Disabled'})")
         
     elif model_name == 'hdanet':
         model = HDANet(n_classes=1, pretrained=False)
@@ -160,6 +162,9 @@ def parse_args():
                         help='Backbone encoder (for hfanet, hfanet_timm, stanet)')
     parser.add_argument('--checkpoint', type=str, required=True,
                         help='Path to model checkpoint')
+    
+    parser.add_argument('--use_dense_cl', action='store_true',
+                        help='Enable Dense Contrastive Learning for SNUNet (Must match training)')
     
     # Data arguments
     parser.add_argument('--data_dir', type=str, required=True,
