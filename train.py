@@ -204,7 +204,22 @@ def train(args):
     optimizer = get_optimizer(model, args)
     scheduler = get_scheduler(optimizer, args)
 
-
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print(f"\n=> Loading checkpoint: {args.resume}")
+            # Checkpoint'i yükle
+            checkpoint = torch.load(args.resume, map_location=device)
+            
+            # 1. Model Ağırlıklarını Yükle
+            model.load_state_dict(checkpoint['model_state_dict'])
+            print(f"=> Model weights loaded successfully!")
+            
+            # NOT: Optimizer ve Epoch bilgisini BİLEREK yüklemiyoruz.
+            # Çünkü biz "Fine-Tuning" yapıyoruz, yeni bir LR ve yeni Scheduler ile
+            # sıfırdan bir epoch sayacıyla başlamak istiyoruz.
+            
+        else:
+            print(f"\n=> No checkpoint found at '{args.resume}'")
 
 
 
