@@ -150,12 +150,19 @@ def get_train_transforms(img_size=512):
     CRITICAL CHANGE: Uses RandomCrop instead of Resize to preserve details.
     """
     return Compose([
-        RandomCrop(img_size),  # [DEĞİŞİKLİK] Resize yerine Crop kullanıldı!
+        RandomCrop(img_size),  
         RandomHorizontalFlip(p=0.5),
         RandomVerticalFlip(p=0.5),
-        RandomRotation(p=0.5),
-        ColorJitter(brightness=0.2, contrast=0.2, p=0.3),
-        GaussianBlur(kernel_size=3, p=0.2),
+        
+        
+        RandomRotation(p=0.3, angles=[90, 180, 270]), 
+
+        
+        ColorJitter(brightness=0.1, contrast=0.1, p=0.2),
+        
+        
+        GaussianBlur(kernel_size=3, p=0.1),
+        
         ToTensor(),
         Normalize(),
         BinarizeLabel(),
