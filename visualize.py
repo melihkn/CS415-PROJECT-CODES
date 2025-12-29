@@ -10,26 +10,24 @@ def visualize_results(data_dir, result_dir, num_samples=5, save_path='report_fig
     Sütunlar: Image A | Image B | Ground Truth | Model Prediction
     """
     
-    # Test klasör yolları
+
     dir_A = os.path.join(data_dir, 'test', 'A')
     dir_B = os.path.join(data_dir, 'test', 'B')
     dir_label = os.path.join(data_dir, 'test', 'label')
     
-    # Sonuçların olduğu klasör kontrolü
+
     if not os.path.exists(result_dir):
         print(f"HATA: '{result_dir}' klasörü bulunamadı.")
         print("Lütfen önce evaluate.py'yi '--save_predictions' parametresiyle çalıştırın.")
         return
 
-    # Dosya listesini al (sadece resimler)
     filenames = [f for f in os.listdir(result_dir) if f.lower().endswith(('.png', '.jpg'))]
     
     if len(filenames) == 0:
         print(f"HATA: '{result_dir}' klasörü boş! Hiç tahmin üretilmemiş.")
         return
 
-    # Rastgele örnekler seç
-    # Eğer num_samples, dosya sayısından fazlaysa hepsini al
+
     sample_count = min(num_samples, len(filenames))
     selected_files = random.sample(filenames, sample_count)
     
@@ -39,7 +37,7 @@ def visualize_results(data_dir, result_dir, num_samples=5, save_path='report_fig
     # Başlıklar
     cols = ['Time 1 (Image A)', 'Time 2 (Image B)', 'Ground Truth', 'SNUNet Prediction']
     
-    # Eğer sadece 1 satır varsa axes tek boyutludur, onu 2 boyutlu yapalım
+    # Eğer sadece 1 satır varsa axes boyutunu düzelt
     if sample_count == 1:
         axes = axes.reshape(1, -1)
 
@@ -81,20 +79,18 @@ def visualize_results(data_dir, result_dir, num_samples=5, save_path='report_fig
         axes[i, 3].imshow(pred, cmap='gray')
         axes[i, 3].axis('off')
 
-    # Boşlukları ayarla ve kaydet
+    # Kaydet
     plt.tight_layout()
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     print(f"\n--> ✅ Figür başarıyla kaydedildi: {save_path}")
     print("Dosyalar menüsünden bu resmi indirip raporuna ekleyebilirsin.")
-    # Colab'da resmi göstermek için:
-    # plt.show() # Eğer hata verirse bunu kapatabilirsin
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Visualize Change Detection Results')
     parser.add_argument('--data_dir', type=str, default='./dataset', help='Dataset root directory')
     parser.add_argument('--result_dir', type=str, required=True, help='Directory containing prediction masks')
     parser.add_argument('--num_samples', type=int, default=5, help='Number of samples to visualize')
-    parser.add_argument('--save_path', type=str, default='comparison_result.png', help='Output filename')
+    parser.add_argument('--save_path', type=str, default='final_report_visuals.png', help='Output filename')
     
     args = parser.parse_args()
     

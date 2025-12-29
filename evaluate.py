@@ -1,8 +1,10 @@
 import os
 import argparse
 import torch
+import numpy as np
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from PIL import Image
 
 # Imports from your project structure
 from models.snunet import SNUNet_ECAM
@@ -25,7 +27,6 @@ def calculate_metrics(TP, FP, FN, TN):
 def load_checkpoint(model, checkpoint_path, device):
     """
     Smartly loads the checkpoint file.
-    Handles both full training checkpoints (with optimizer states) and weight-only files.
     """
     print(f"Loading model weights from: {checkpoint_path}")
     if not os.path.exists(checkpoint_path):
@@ -33,12 +34,10 @@ def load_checkpoint(model, checkpoint_path, device):
 
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
-    # Check if checkpoint is a dictionary containing metadata (epoch, optimizer, etc.)
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
         print(f"  -> Full Checkpoint detected (Saved at Epoch: {checkpoint.get('epoch', 'Unknown')})")
         model.load_state_dict(checkpoint['model_state_dict'])
     else:
-        # If it only contains weights (state_dict)
         print("  -> State Dict (Weights Only) detected.")
         model.load_state_dict(checkpoint)
     
@@ -54,9 +53,9 @@ def evaluate(args):
     print(f"Image Size  : {args.img_size}x{args.img_size}")
     print(f"Threshold   : {args.threshold}")
     print(f"DenseCL Mode: {'Enabled' if args.use_dense_cl else 'Disabled'}")
+    print(f"Save Preds  : {'Enabled' if args.save_predictions else 'Disabled'}")
 
     # 2. Initialize Model
-    # CRITICAL: If trained with DenseCL, 'use_dense_cl' must be True to match architecture keys.
     model = SNUNet_ECAM(in_ch=3, out_ch=1, use_dense_cl=args.use_dense_cl).to(device)
     
     # 3. Load Weights
@@ -68,7 +67,7 @@ def evaluate(args):
     test_dataset = ChangeDetectionDataset(
         root_dir=args.data_dir, 
         split='test', 
-        img_size=args.img_size # Must match training size (e.g., 512)
+        img_size=args.img_size 
     )
     test_loader = DataLoader(
         test_dataset, 
@@ -79,11 +78,19 @@ def evaluate(args):
 
     print(f"Total test images: {len(test_dataset)}")
 
-    # Initialize counters for Confusion Matrix
+    # Prepare Output Directory for Predictions
+    if args.save_predictions:
+        pred_dir = os.path.join(args.output_dir, 'predictions')
+        os.makedirs(pred_dir, exist_ok=True)
+        print(f"Predictions will be saved to: {pred_dir}")
+
+    # Initialize counters
     total_TP = 0
     total_FP = 0
     total_FN = 0
     total_TN = 0
+    
+    global_idx = 0 # To track image naming if 'name' is not in batch
 
     print("\nStarting inference loop...")
     print("-" * 50)
@@ -93,19 +100,17 @@ def evaluate(args):
             img_A = batch['image_A'].to(device)
             img_B = batch['image_B'].to(device)
             label = batch['label'].to(device)
+            
+            # Bazı dataset yapılarında dosya ismi de döner, kontrol edelim
+            names = batch.get('name', [])
 
             # Forward Pass
             outputs = model(img_A, img_B)
             
-            # SNUNet returns a list of outputs [out1, out2, out3, out4].
-            # We use the first one (deepest supervision) or combine them.
             if isinstance(outputs, (list, tuple)):
                 outputs = outputs[0]
             
-            # Apply Sigmoid to get probabilities (0-1)
             probs = torch.sigmoid(outputs)
-            
-            # Apply Binary Threshold (Default 0.4)
             preds = (probs > args.threshold).float()
 
             # --- Calculate Pixel-wise Statistics ---
@@ -119,6 +124,27 @@ def evaluate(args):
             total_FN += FN
             total_TN += TN
 
+            # --- Save Predictions if Enabled ---
+            if args.save_predictions:
+                # Convert predictions to numpy (0 or 255)
+                preds_np = (preds.cpu().numpy() * 255).astype(np.uint8)
+                
+                for i in range(preds_np.shape[0]):
+                    mask = preds_np[i, 0, :, :] # (H, W)
+                    
+                    # Dosya ismini belirle
+                    if len(names) > i:
+                        file_name = names[i]
+                        # Uzantıyı garantile
+                        if not file_name.lower().endswith('.png'):
+                            file_name = os.path.splitext(file_name)[0] + '.png'
+                    else:
+                        file_name = f"pred_{global_idx}.png"
+                    
+                    save_path = os.path.join(pred_dir, file_name)
+                    Image.fromarray(mask).save(save_path)
+                    global_idx += 1
+
     # 5. Calculate Final Metrics
     precision, recall, f1, iou, acc = calculate_metrics(total_TP, total_FP, total_FN, total_TN)
 
@@ -128,12 +154,11 @@ def evaluate(args):
     print(f"Precision : {precision:.4f}")
     print(f"Recall    : {recall:.4f}")
     print(f"F1-Score  : {f1:.4f}")
-    print(f"IoU       : {iou:.4f}  <-- (Intersection over Union)")
+    print(f"IoU       : {iou:.4f}")
     print(f"Accuracy  : {acc:.4f}")
     print("-" * 50)
-    print(f"Confusion Matrix Counts:")
-    print(f"TP: {int(total_TP)} | FP: {int(total_FP)}")
-    print(f"FN: {int(total_FN)} | TN: {int(total_TN)}")
+    if args.save_predictions:
+        print(f"Predictions saved to: {pred_dir}")
     print("="*50 + "\n")
 
 if __name__ == '__main__':
@@ -143,12 +168,16 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='./dataset', help='Path to dataset root')
     parser.add_argument('--model_path', type=str, required=True, help='Path to .pth checkpoint file')
     
+    # Output Arguments (EKSİK OLANLAR EKLENDİ)
+    parser.add_argument('--output_dir', type=str, default='./test_results', help='Directory to save outputs')
+    parser.add_argument('--save_predictions', action='store_true', help='Flag to save predicted masks')
+    
     # Model Arguments
-    parser.add_argument('--img_size', type=int, default=512, help='Input image size (must match training)')
+    parser.add_argument('--img_size', type=int, default=512, help='Input image size')
     parser.add_argument('--use_dense_cl', action='store_true', help='Set this if model was trained with DenseCL')
     
     # Hyperparameters
-    parser.add_argument('--threshold', type=float, default=0.4, help='Threshold for binary classification (0.0 - 1.0)')
+    parser.add_argument('--threshold', type=float, default=0.4, help='Threshold for binary classification')
     parser.add_argument('--batch_size', type=int, default=8, help='Batch size for inference')
     parser.add_argument('--num_workers', type=int, default=2, help='Number of data loading workers')
 
