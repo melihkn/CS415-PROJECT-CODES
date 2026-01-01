@@ -2,20 +2,40 @@ import torch
 import torch.nn as nn
 import segmentation_models_pytorch as smp
 import timm
-from models.HFANet.components import HighFrequencyExtractor, DecoderBlock
+from .components.HighFrequencyExtractor import HighFrequencyExtractor
+from .components.DecoderBlock import DecoderBlock
 
 class HFANet(nn.Module):
-    def __init__(self, encoder_name='resnet34', classes=1, pretrained='imagenet', in_channels=3):
+    def __init__(self, encoder_name='resnet34', classes=1, pretrained='imagenet', in_channels=3, ssl4eo_weights=None, ssl_method='moco'):
         super(HFANet, self).__init__()
         
         # --- 1. Spatial Stream (Backbone) ---
         # We use smp to get a pre-built U-Net with a ResNet encoder.
-        self.smp_model = smp.Unet(
-            encoder_name=encoder_name,
-            encoder_weights=pretrained,
-            in_channels=in_channels,
-            classes=classes
-        )
+        if ssl4eo_weights == 'torchgeo':
+            # Use TorchGeo's built-in weights
+            print("[HFANet] Using TorchGeo SSL4EO-S12 weights")
+            self._init_with_torchgeo(encoder_name, in_channels, classes, ssl_method)
+            
+        elif ssl4eo_weights is not None:
+            # Use custom checkpoint file
+            print(f"[HFANet] Using SSL4EO-S12 ({ssl_method}) from: {ssl4eo_weights}")
+            self.smp_model = smp.Unet(
+                encoder_name=encoder_name,
+                encoder_weights=None,
+                in_channels=in_channels,
+                classes=classes
+            )
+            self._load_ssl4eo_weights(ssl4eo_weights, ssl_method)
+            
+        else:
+            # ImageNet weights
+            print(f"[HFANet] Using {encoder_name} with ImageNet weights")
+            self.smp_model = smp.Unet(
+                encoder_name=encoder_name,
+                encoder_weights=pretrained,
+                in_channels=in_channels,
+                classes=classes
+            )
         
         # --- 2. High-Frequency Stream ---
         self.hf_extractor = HighFrequencyExtractor(in_channels=in_channels)
@@ -48,6 +68,88 @@ class HFANet(nn.Module):
             nn.BatchNorm2d(sp_channels),
             nn.ReLU()
         )
+
+    def _init_with_torchgeo(self, encoder_name, in_channels, classes, ssl_method):
+        """Initialize using TorchGeo's pretrained weights."""
+        try:
+            from torchgeo.models import ResNet50_Weights, resnet50
+            
+            if ssl_method == 'moco':
+                weights = ResNet50_Weights.SENTINEL2_RGB_MOCO
+            else:
+                # TorchGeo might not have DINO, fall back to MoCo
+                weights = ResNet50_Weights.SENTINEL2_RGB_MOCO
+                print("[HFANet] DINO not available in TorchGeo, using MoCo")
+            
+            # Get pretrained backbone
+            torchgeo_model = resnet50(weights=weights)
+            
+            # Create SMP model without weights
+            self.smp_model = smp.Unet(
+                encoder_name='resnet50',
+                encoder_weights=None,
+                in_channels=in_channels,
+                classes=classes
+            )
+            
+            # Copy weights from TorchGeo to SMP encoder
+            smp_state = self.smp_model.encoder.state_dict()
+            tg_state = torchgeo_model.state_dict()
+            
+            loaded = 0
+            for key in smp_state:
+                if key in tg_state and smp_state[key].shape == tg_state[key].shape:
+                    smp_state[key] = tg_state[key]
+                    loaded += 1
+            
+            self.smp_model.encoder.load_state_dict(smp_state)
+            print(f"[HFANet] Loaded {loaded} weights from TorchGeo")
+            
+        except ImportError:
+            raise ImportError("TorchGeo not installed. Run 'pip install torchgeo' to use SSL4EO weights.")
+        
+    def _load_ssl4eo_weights(self, checkpoint_path, ssl_method):
+        """Load SSL4EO weights from checkpoint file."""
+        checkpoint = torch.load(checkpoint_path, map_location='cpu')
+        
+        if ssl_method == 'moco':
+            state_dict = checkpoint.get('state_dict', checkpoint)
+            prefixes = ['module.encoder_q.', 'encoder_q.', 'module.']
+        elif ssl_method == 'dino':
+            if 'teacher' in checkpoint:
+                state_dict = checkpoint['teacher']
+            else:
+                state_dict = checkpoint.get('state_dict', checkpoint)
+            prefixes = ['module.', 'backbone.', 'encoder.']
+        else:
+            raise ValueError(f"Unknown ssl_method: {ssl_method}")
+        
+        # Process weights
+        processed = {}
+        skip_keywords = ['fc', 'head', 'projector', 'dino_head', 'mlp', 'pred']
+        
+        for key, value in state_dict.items():
+            new_key = key
+            for prefix in prefixes:
+                if new_key.startswith(prefix):
+                    new_key = new_key[len(prefix):]
+                    break
+            
+            if any(kw in new_key.lower() for kw in skip_keywords):
+                continue
+            processed[new_key] = value
+        
+        # Load into encoder
+        encoder_state = self.smp_model.encoder.state_dict()
+        loaded = 0
+        
+        for key, value in processed.items():
+            if key in encoder_state and encoder_state[key].shape == value.shape:
+                encoder_state[key] = value
+                loaded += 1
+        
+        self.smp_model.encoder.load_state_dict(encoder_state)
+        print(f"[HFANet] Loaded {loaded}/{len(encoder_state)} weights") 
 
 
     def forward(self, x1, x2):
