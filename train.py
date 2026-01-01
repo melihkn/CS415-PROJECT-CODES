@@ -28,12 +28,24 @@ def get_model(args, device):
         
     elif model_name == 'hdanet':
         from models.HDANet.hdanet import HDANet
-        model = HDANet(n_classes=1, pretrained=True)
+        model = HDANet(
+            n_channels=3,
+            n_classes=1,
+            pretrained=True,
+            ssl4eo_weights=args.ssl4eo_weights,
+            ssl_method=args.ssl_method
+        )
         print(f"Model: HDANet")
         
     elif model_name == 'hfanet':
         from models.HFANet.hfanet import HFANet
-        model = HFANet(encoder_name=args.backbone, classes=1, pretrained='imagenet')
+        model = HFANet(
+            encoder_name=args.backbone,
+            classes=1,
+            pretrained='imagenet' if args.ssl4eo_weights is None else None,
+            ssl4eo_weights=args.ssl4eo_weights,
+            ssl_method=args.ssl_method
+        )
         print(f"Model: HFANet with backbone={args.backbone}")
         
     elif model_name == 'hfanet_timm':
@@ -161,16 +173,25 @@ def train(args):
     """
     # Device setup
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"\n{'='*60}")
-    print(f"TRAINING CONFIGURATION")
-    print(f"{'='*60}")
-    print(f"Device: {device}")
+    
     
     # Create model
     model = get_model(args, device)
     
     # Create data loaders
     print(f"\nLoading data from: {args.data_dir}")
+    print("=" * 60)
+    print("Training Configuration:")
+    print(f"  Model:       {args.model}")
+    print(f"  Backbone:    {args.backbone}")
+    if args.ssl4eo_weights:
+        print(f"  Pretrained:  SSL4EO-S12 ({args.ssl_method})")
+    else:
+        print(f"  Pretrained:  ImageNet")
+    print(f"  Epochs:      {args.epochs}")
+    print(f"  Batch Size:  {args.batch_size}")
+    print(f"  LR:          {args.lr}")
+    print("=" * 60)
     train_loader = get_dataloader(
         args.data_dir, 
         batch_size=args.batch_size, 
@@ -295,6 +316,10 @@ def parse_args():
                         help='Model architecture')
     parser.add_argument('--backbone', type=str, default='resnet34',
                         help='Backbone encoder (for hfanet, hfanet_timm, stanet)')
+    parser.add_argument('--ssl4eo_weights', type=str, default=None,
+                        help='Path to SSL4EO-S12 weights (use with hfanet)')
+    parser.add_argument('--ssl_method', type=str, default='moco', choices=['moco', 'dino'])
+
     
     # Data arguments
     parser.add_argument('--data_dir', type=str, required=True,
