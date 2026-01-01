@@ -6,3 +6,4 @@ ipykernel
 tqdm
 scikit-learn
 matplotlib
+torchgeo
