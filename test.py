@@ -8,6 +8,7 @@ from models.snunet import SNUNet_ECAM
 from models.stanet import STANet
 from models.HDANet.hdanet import HDANet
 from models.HFANet.hfanet import HFANet, HFANet_timm
+from models.segnet import SegNet
 
 # Data
 from data.dataset import get_dataloader
@@ -20,7 +21,7 @@ def get_model(model_name, backbone='resnet34'):
     """
     Factory function to create model based on name.
     
-    Supported models: snunet, hdanet, hfanet, hfanet_timm, stanet
+    Supported models: snunet, hdanet, hfanet, hfanet_timm, stanet, segnet
     """
     model_name = model_name.lower()
     
@@ -38,10 +39,13 @@ def get_model(model_name, backbone='resnet34'):
         
     elif model_name == 'stanet':
         model = STANet(backbone_name=backbone, classes=1, pretrained=False)
+
+    elif model_name == 'segnet':
+        model = SegNet(backbone_name=backbone, pretrained=False)
         
     else:
         raise ValueError(f"Unknown model: {model_name}. "
-                        f"Choose from: snunet, hdanet, hfanet, hfanet_timm, stanet")
+                        f"Choose from: snunet, hdanet, hfanet, hfanet_timm, stanet, segnet")
     
     return model
 
@@ -75,7 +79,7 @@ def test(args):
     """
     Main testing function.
     
-    Compatible with: SNUNet, HDANet, HFANet, HFANet-TIMM, STANet
+    Compatible with: SNUNet, HDANet, HFANet, HFANet-TIMM, STANet, SegNet
     """
     # Device setup
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -154,10 +158,10 @@ def parse_args():
     
     # Model arguments
     parser.add_argument('--model', type=str, required=True,
-                        choices=['snunet', 'hdanet', 'hfanet', 'hfanet_timm', 'stanet'],
+                        choices=['snunet', 'hdanet', 'hfanet', 'hfanet_timm', 'stanet','segnet'],
                         help='Model architecture')
     parser.add_argument('--backbone', type=str, default='resnet34',
-                        help='Backbone encoder (for hfanet, hfanet_timm, stanet)')
+                        help='Backbone encoder (for hfanet, hfanet_timm, stanet, segnet)')
     parser.add_argument('--checkpoint', type=str, required=True,
                         help='Path to model checkpoint')
     
